@@ -24,6 +24,7 @@ use notify::{Watcher as WatcherApi, RecommendedWatcher as FileWatcher, op};
 use input::{Action, Binding, MouseBinding, KeyBinding};
 
 use ansi;
+use cli::ConfigFile;
 
 /// Function that returns true for serde default
 fn true_bool() -> bool {
@@ -853,32 +854,37 @@ impl Config {
     /// 2. $XDG_CONFIG_HOME/alacritty.yml
     /// 3. $HOME/.config/alacritty/alacritty.yml
     /// 4. $HOME/.alacritty.yml
-    pub fn load() -> Result<Config> {
+    pub fn load(config: &ConfigFile) -> Result<Config> {
         let home = env::var("HOME")?;
 
-        // Try using XDG location by default
-        let path = ::xdg::BaseDirectories::with_prefix("alacritty")
-            .ok()
-            .and_then(|xdg| xdg.find_config_file("alacritty.yml"))
-            .or_else(|| {
-                ::xdg::BaseDirectories::new().ok().and_then(|fallback| {
-                    fallback.find_config_file("alacritty.yml")
-                })
-            })
-            .or_else(|| {
-                // Fallback path: $HOME/.config/alacritty/alacritty.yml
-                let fallback = PathBuf::from(&home).join(".config/alacritty/alacritty.yml");
-                match fallback.exists() {
-                    true => Some(fallback),
-                    false => None
-                }
-            })
-            .unwrap_or_else(|| {
-                // Fallback path: $HOME/.alacritty.yml
-                PathBuf::from(&home).join(".alacritty.yml")
-            });
+        match *config {
+            ConfigFile::Path(ref p) => Config::load_from(p),
+            ConfigFile::Default => {
+                // Try using XDG location by default
+                let path = ::xdg::BaseDirectories::with_prefix("alacritty")
+                    .ok()
+                    .and_then(|xdg| xdg.find_config_file("alacritty.yml"))
+                    .or_else(|| {
+                        ::xdg::BaseDirectories::new().ok().and_then(|fallback| {
+                            fallback.find_config_file("alacritty.yml")
+                        })
+                    })
+                    .or_else(|| {
+                        // Fallback path: $HOME/.config/alacritty/alacritty.yml
+                        let fallback = PathBuf::from(&home).join(".config/alacritty/alacritty.yml");
+                        match fallback.exists() {
+                            true => Some(fallback),
+                            false => None
+                        }
+                    })
+                    .unwrap_or_else(|| {
+                        // Fallback path: $HOME/.alacritty.yml
+                        PathBuf::from(&home).join(".alacritty.yml")
+                    });
 
-        Config::load_from(path)
+                Config::load_from(path)
+            }
+        }
     }
 
     pub fn write_defaults() -> io::Result<PathBuf> {
@@ -1219,7 +1225,7 @@ impl Monitor {
                         // Reload file
                         path.map(|path| {
                             if path == config_path {
-                                match Config::load() {
+                                match Config::load(&ConfigFile::Path(path)) {
                                     Ok(config) => {
                                         let _ = config_tx.send(config);
                                         handler.on_config_reload();

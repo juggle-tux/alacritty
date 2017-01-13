@@ -15,8 +15,24 @@ extern crate log;
 use clap::{Arg, App};
 use index::{Line, Column};
 use config::Shell;
+use std::path::PathBuf;
+use std::fmt;
 
 const DEFAULT_TITLE: &'static str = "Alacritty";
+
+pub enum ConfigFile {
+    Default,
+    Path(PathBuf)
+}
+
+impl fmt::Display for ConfigFile {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ConfigFile::Default => write!(f, "default config"),
+            ConfigFile::Path(ref path) => write!(f, "config {:?}", path),
+        }
+    }
+}
 
 /// Options specified on the command line
 pub struct Options {
@@ -27,6 +43,7 @@ pub struct Options {
     pub title: String,
     pub log_level: log::LogLevelFilter,
     pub shell: Option<Shell<'static>>,
+    pub config: ConfigFile
 }
 
 impl Default for Options {
@@ -39,6 +56,7 @@ impl Default for Options {
             title: DEFAULT_TITLE.to_owned(),
             log_level: log::LogLevelFilter::Warn,
             shell: None,
+            config: ConfigFile::Default
         }
     }
 }
@@ -84,6 +102,10 @@ impl Options {
                 .min_values(1)
                 .allow_hyphen_values(true)
                 .help("Command and args to execute (must be last argument)"))
+            .arg(Arg::with_name("config")
+                 .long("config")
+                 .takes_value(true)
+                 .help("Defines the config file to load"))
             .get_matches();
 
         if matches.is_present("ref-test") {
@@ -123,6 +145,10 @@ impl Options {
             let command = String::from(args.next().unwrap());
             let args = args.map(String::from).collect();
             options.shell = Some(Shell::new_with_args(command, args));
+        }
+
+        if let Some(config) = matches.value_of("config") {
+            options.config = ConfigFile::Path(PathBuf::from(config));
         }
 
         options

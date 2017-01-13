@@ -25,7 +25,7 @@ extern crate log;
 use std::error::Error;
 use std::sync::Arc;
 
-use alacritty::cli;
+use alacritty::cli::{self, ConfigFile};
 use alacritty::config::{self, Config};
 use alacritty::display::Display;
 use alacritty::event;
@@ -37,28 +37,27 @@ use alacritty::tty::{self, process_should_exit};
 use alacritty::util::fmt::Red;
 
 fn main() {
+    // Load command line options
+    let options = cli::Options::load();
 
     // Load configuration
-    let config = Config::load().unwrap_or_else(|err| {
-        match err {
+    let config = Config::load(&options.config).unwrap_or_else(|err| {
+        match (&options.config, err) {
             // Use default config when not found
-            config::Error::NotFound => {
+            (&ConfigFile::Default, config::Error::NotFound) => {
                 match Config::write_defaults() {
                     Ok(path) => err_println!("Config file not found; write defaults config to {:?}", path),
                     Err(err) => err_println!("Write defaults config failure: {}", err)
                 }
 
-                Config::load().unwrap()
+                Config::load(&ConfigFile::Default).unwrap()
             },
 
             // If there's a problem with the config file, print an error
             // and exit.
-            _ => die!("{}", err),
+            (config, err) => die!("loading {}: {}", config, err),
         }
     });
-
-    // Load command line options
-    let options = cli::Options::load();
 
     // Run alacritty
     if let Err(err) = run(config, options) {
